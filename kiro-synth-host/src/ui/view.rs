@@ -1,29 +1,56 @@
 use std::sync::{Arc, Mutex};
 
-use druid::{Widget, Color, Data, Env};
-use druid::widget::{Flex, WidgetExt, Label, Container};
+use druid::{Widget, Data, Env, EventCtx, Event, Color, Key, PaintCtx, Rect, PaintBrush, KeyOrValue, Value};
+use druid::widget::{Flex, WidgetExt, Label, Button, Controller};
 
 use kiro_synth_core::float::Float;
 
 use crate::synth::SynthClient;
-use crate::ui::model::{SynthModel, Osc, EnvGen, ParamToKnobData, Param, Filter, Dca};
+use crate::ui::model::{SynthModel, Osc, EnvGen, KnobDataFromParam, Param, Filter, Dca, OscFromSynth};
 use crate::ui::widgets::knob::{KnobData, Knob};
-use crate::ui::GREY_83;
+use crate::ui::widgets::container::Container;
+use crate::ui::widgets::view_switcher::ViewSwitcher;
+use crate::ui::{GREY_83, GREY_46};
 
+struct TabController<T> {
+  action: Box<dyn Fn(&mut T)>
+}
+
+impl<T: Data> TabController<T> {
+  pub fn new(action: impl Fn(&mut T) + 'static) -> Self {
+    TabController {
+      action: Box::new(action)
+    }
+  }
+}
+
+impl<T, W: Widget<T>> Controller<T, W> for TabController<T> {
+  fn event(
+    &mut self,
+    child: &mut W,
+    ctx: &mut EventCtx,
+    event: &Event,
+    data: &mut T,
+    env: &Env,
+  ) {
+    if let Event::MouseDown(_) = event {
+      (self.action)(data);
+      ctx.request_paint();
+    }
+    else {
+      child.event(ctx, event, data, env);
+    }
+  }
+}
+
+const TAB_BACKGROUND: Key<Color> = Key::new("tab.background-color");
 
 pub fn build<F: Float + 'static>(synth_model: &SynthModel,
                                  synth_client: Arc<Mutex<SynthClient<F>>>) -> impl Widget<SynthModel> {
 
   Flex::column()
     .with_child(
-      build_osc("OSC1", &synth_model.osc1, synth_client.clone())
-              .lens(SynthModel::osc1)
-              .padding(6.0),
-      1.0
-    )
-    .with_child(
-      build_osc("OSC2", &synth_model.osc2, synth_client.clone())
-              .lens(SynthModel::osc2)
+      build_osc_tabs(synth_model, synth_client.clone())
               .padding(6.0),
       1.0
     )
@@ -49,6 +76,80 @@ pub fn build<F: Float + 'static>(synth_model: &SynthModel,
           ),
       1.0
     )
+}
+
+fn build_osc_tabs<F: Float + 'static>(synth_model: &SynthModel,
+                                      synth_client: Arc<Mutex<SynthClient<F>>>) -> impl Widget<SynthModel> {
+
+  let mut tabs = Flex::row();
+  for (i, osc) in synth_model.osc.iter().enumerate() {
+    let callback = move |data: &mut usize| *data = i;
+    let label = Container::new(Label::new(format!("OSC{}", i + 1)).padding((6.0, 2.0, 2.0, 0.0)))
+        .border(GREY_83, 2.0)
+        .background_color(TAB_BACKGROUND)
+        .env_scope(move |env, data| {
+          if *data == i {
+            env.set(TAB_BACKGROUND, GREY_83)
+          } else {
+            env.set(TAB_BACKGROUND, GREY_46)
+          }
+        })
+        .controller(TabController::new(callback))
+        .lens(SynthModel::osc_index);
+
+    tabs.add_child(label, 0.0);
+  }
+
+  let osc_model: Vec<Osc> = synth_model.osc.clone();
+  let switcher = ViewSwitcher::new(
+    |data: &SynthModel, _env| data.osc_index,
+    move |index: &usize, _env| {
+      Box::new(
+        build_osc_view(&osc_model[*index], synth_client.clone())
+            .lens(OscFromSynth)
+      )
+    },
+  );
+  let body = Container::new(switcher.padding(6.0))
+      .border(GREY_83, 2.0);
+
+  Flex::column()
+      .with_child(tabs, 0.0)
+      .with_child(body, 1.0)
+}
+
+fn build_osc_view<F: Float + 'static>(osc_model: &Osc,
+                                      synth_client: Arc<Mutex<SynthClient<F>>>) -> impl Widget<Osc> {
+
+  let shape_client = synth_client.clone();
+  let shape_fn = move |index: usize| shape_client.lock().unwrap().waveforms().name(index).to_string();
+
+  Flex::row()
+      .with_child(
+        build_knob_enum("Shape", shape_fn, &osc_model.shape, synth_client.clone())
+            .lens(Osc::shape),
+        1.0
+      )
+      .with_child(
+        build_knob_value("Octaves", "", &osc_model.octaves, synth_client.clone())
+            .lens(Osc::octaves),
+        1.0
+      )
+      .with_child(
+        build_knob_value("Semitones", "", &osc_model.semitones, synth_client.clone())
+            .lens(Osc::semitones),
+        1.0
+      )
+      .with_child(
+        build_knob_value("Cents", "", &osc_model.cents, synth_client.clone())
+            .lens(Osc::cents),
+        1.0
+      )
+      .with_child(
+        build_knob_value("Amplitude", "", &osc_model.amplitude, synth_client.clone())
+            .lens(Osc::amplitude),
+        1.0
+      )
 }
 
 fn build_osc<F: Float + 'static>(title: &str,
@@ -213,6 +314,7 @@ fn build_knob<F: Float + 'static>(title: &'static str,
 
   let param_ref = param.param_ref;
   let callback = move |data: &KnobData| {
+    println!("value changed {}", data.value);
     synth_client.lock().unwrap().send_param_value(param_ref, F::val(data.value));
   };
 
@@ -220,5 +322,5 @@ fn build_knob<F: Float + 'static>(title: &'static str,
     .with_child(Label::new(title).center(), 0.0)
     .with_child(Knob::new(param.origin, param.min, param.max, param.step, callback).fix_size(48.0, 48.0).center(),0.0)
     .with_child(Label::new(move |data: &KnobData, _env: &Env| value_fn(data)).center(), 0.0)
-    .lens(ParamToKnobData)
+    .lens(KnobDataFromParam)
 }
