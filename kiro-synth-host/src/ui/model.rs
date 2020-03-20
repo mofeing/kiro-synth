@@ -19,6 +19,42 @@ impl Lens<SynthModel, Osc> for OscFromSynth {
   }
 }
 
+pub struct EgFromSynth;
+
+impl Lens<SynthModel, EnvGen> for EgFromSynth {
+  fn with<V, F: FnOnce(&EnvGen) -> V>(&self, data: &SynthModel, f: F) -> V {
+    f(&data.eg[data.eg_index])
+  }
+
+  fn with_mut<V, F: FnOnce(&mut EnvGen) -> V>(&self, data: &mut SynthModel, f: F) -> V {
+    f(&mut data.eg[data.eg_index])
+  }
+}
+
+pub struct FilterFromSynth;
+
+impl Lens<SynthModel, Filter> for FilterFromSynth {
+  fn with<V, F: FnOnce(&Filter) -> V>(&self, data: &SynthModel, f: F) -> V {
+    f(&data.filter[data.filter_index])
+  }
+
+  fn with_mut<V, F: FnOnce(&mut Filter) -> V>(&self, data: &mut SynthModel, f: F) -> V {
+    f(&mut data.filter[data.filter_index])
+  }
+}
+
+pub struct ZeroIndex;
+
+impl Lens<SynthModel, usize> for ZeroIndex {
+  fn with<V, F: FnOnce(&usize) -> V>(&self, _data: &SynthModel, f: F) -> V {
+    f(&0usize)
+  }
+
+  fn with_mut<V, F: FnOnce(&mut usize) -> V>(&self, _data: &mut SynthModel, f: F) -> V {
+    f(&mut 0usize)
+  }
+}
+
 pub struct KnobDataFromParam;
 
 impl Lens<Param, KnobData> for KnobDataFromParam {
@@ -90,7 +126,7 @@ impl Osc {
   }
 }
 
-#[derive(Debug, Clone, Data, Lens)]
+#[derive(Debug, Clone, PartialEq, Data, Lens)]
 pub struct EnvGen {
   pub attack: Param,
   pub decay: Param,
@@ -117,7 +153,7 @@ impl EnvGen {
   }
 }
 
-#[derive(Debug, Clone, Data, Lens)]
+#[derive(Debug, Clone, PartialEq, Data, Lens)]
 pub struct Filter {
   pub mode: Param,
   pub freq: Param,
@@ -151,13 +187,18 @@ impl Dca {
 
 #[derive(Debug, Clone, Data, Lens)]
 pub struct SynthModel {
-  pub osc_index: usize,
   #[druid(same_fn = "PartialEq::eq")]
   pub osc: Vec<Osc>,
-  // pub osc1: Osc,
-  // pub osc2: Osc,
-  pub eg1: EnvGen,
-  pub filt1: Filter,
+  pub osc_index: usize,
+
+  #[druid(same_fn = "PartialEq::eq")]
+  pub eg: Vec<EnvGen>,
+  pub eg_index: usize,
+
+  #[druid(same_fn = "PartialEq::eq")]
+  pub filter: Vec<Filter>,
+  pub filter_index: usize,
+
   pub dca: Dca,
 }
 
@@ -166,13 +207,22 @@ impl SynthModel {
     let params = &module.params;
 
     SynthModel {
-      osc_index: 0,
       osc: vec![
         Osc::new(program, &params.osc3),
         Osc::new(program, &params.osc4),
       ],
-      eg1: EnvGen::new(program, &params.eg1),
-      filt1: Filter::new(program, &params.filt1),
+      osc_index: 0,
+
+      eg: vec![
+        EnvGen::new(program, &params.eg1),
+      ],
+      eg_index: 0,
+
+      filter: vec![
+        Filter::new(program, &params.filt1),
+      ],
+      filter_index: 0,
+
       dca: Dca::new(program, &params.dca),
     }
   }
