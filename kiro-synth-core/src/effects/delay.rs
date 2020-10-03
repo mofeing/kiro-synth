@@ -80,3 +80,48 @@ impl<'a, F: Float> Delay<'a, F> {
     sample * self.mix + input * (F::val(1.0) - self.mix)
   }
 }
+
+#[cfg(test)]
+mod test {
+  use super::*;
+  use assert_approx_eq::assert_approx_eq;
+
+  #[test]
+  fn delayline_get() {
+    let mut buffer = [4., 3., 2., 1.];
+    // let delayline = DelayLine::new(1.0, &mut buffer);
+    let delayline = DelayLine {
+      head: 1,
+      buffer: &mut buffer,
+    };
+
+    assert_approx_eq!(delayline.get(1), 4.0f64);
+    assert_approx_eq!(delayline.get(2), 1.0f64);
+    assert_approx_eq!(delayline.get(3), 2.0f64);
+    assert_approx_eq!(delayline.get(4), 3.0f64);
+    assert_approx_eq!(delayline.get(5), 3.0f64);
+    assert_approx_eq!(delayline.get(6), 3.0f64);
+  }
+
+  #[test]
+  fn delayline_update() {
+    let mut buffer = [0.; 4];
+    let mut delayline = DelayLine {
+      head: 1,
+      buffer: &mut buffer,
+    };
+
+    delayline.update(1.0);
+    delayline.update(2.0);
+    delayline.update(3.0);
+    delayline.update(4.0);
+
+    let DelayLine { head: _, buffer } = delayline;
+    buffer
+      .iter()
+      .zip([4.0f64, 1.0f64, 2.0f64, 3.0f64].iter())
+      .for_each(|(a, b)| {
+        assert_approx_eq!(a, b);
+      });
+  }
+}
