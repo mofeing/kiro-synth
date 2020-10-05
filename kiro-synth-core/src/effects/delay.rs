@@ -27,7 +27,7 @@ impl<'a, F: Float> DelayLine<'a, F> {
   }
 }
 
-/// Simple delay effect with 3 parameters: the delay amount, the amount of feedback and dry/run mix.
+/// Simple delay effect with 3 parameters: the delay amount, the amount of feedback and dry/wet mix.
 pub struct Delay<'a, F: Float> {
   /// The amount of delay for the output signal. Values from `1.0 / sample_rate` to `buffer.len() / sample_rate`.
   delay_seconds: F,
