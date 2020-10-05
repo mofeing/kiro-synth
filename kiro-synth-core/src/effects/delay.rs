@@ -35,7 +35,6 @@ pub struct Delay<'a, F: Float> {
   feedback: F,
   /// The dry/wet proportion. Values from 0.0 (dry) to 1.0 (wet)
   mix: F,
-  
   sample_rate: F,
   delayline: DelayLine<'a, F>,
   delay_samples: usize,
