@@ -27,22 +27,27 @@ impl<'a, F: Float> DelayLine<'a, F> {
   }
 }
 
+/// Simple delay effect with 3 parameters: the delay amount, the amount of feedback and dry/run mix.
 pub struct Delay<'a, F: Float> {
-  delay_samples: usize,
+  /// The amount of delay for the output signal. Values from `1.0 / sample_rate` to `buffer.len() / sample_rate`.
   delay_seconds: F,
+  /// The amount of feedback for the output signal into the delay line again. Values from 0.0 to 1.0
   feedback: F,
+  /// The dry/wet proportion. Values from 0.0 (dry) to 1.0 (wet)
   mix: F,
-  delayline: DelayLine<'a, F>,
+  
   sample_rate: F,
+  delayline: DelayLine<'a, F>,
+  delay_samples: usize,
 }
 
 impl<'a, F: Float> Delay<'a, F> {
   pub fn new(sample_rate: F, buffer: &'a mut [F]) -> Self {
     Self {
-      delay_samples: 1, // delay in samples NOTE it must never be 0
-      delay_seconds: F::val(1) / sample_rate,
-      feedback: F::zero(), // between 0 and 1
-      mix: F::zero(),      // between 0 and 1
+      delay_samples: 1,
+      delay_seconds: sample_rate.recip(),
+      feedback: F::zero(),
+      mix: F::zero(),
       delayline: DelayLine::<F>::new(buffer),
       sample_rate,
     }
@@ -77,7 +82,7 @@ impl<'a, F: Float> Delay<'a, F> {
     let sample = self.delayline.get(self.delay_samples);
     self.delayline.update(input + sample * self.feedback);
 
-    sample * self.mix + input * (F::val(1.0) - self.mix)
+    sample * self.mix + input * (F::one() - self.mix)
   }
 }
 
@@ -89,7 +94,6 @@ mod test {
   #[test]
   fn delayline_get() {
     let mut buffer = [4., 3., 2., 1.];
-    // let delayline = DelayLine::new(1.0, &mut buffer);
     let delayline = DelayLine {
       head: 1,
       buffer: &mut buffer,
